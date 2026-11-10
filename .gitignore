@@ -1,0 +1,13 @@
+.env
+.idea
+leaderboards/
+message_data/
+wordle_data/
+DiscordChatExporter*/
+.code
+.venv/
+__pycache__/
+*.py[cod]
+database.db
+*.pre-v1-*.bak
+Microsoft/Windows/PowerShell/ModuleAnalysisCache
