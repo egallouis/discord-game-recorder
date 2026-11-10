@@ -7,3 +7,14 @@ dependencies = [
     "numpy>=2.2.4",
     "polars>=1.26.0",
 ]
+
+[project.scripts]
+dgr = "discord_game_recorder:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["games"]
+py-modules = ["ban_list", "database", "discord_game_recorder", "evaluate", "fetch", "periods"]

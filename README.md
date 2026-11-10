@@ -6,13 +6,16 @@ their own parsing, scoring, and optional report statistics.
 
 ## Setup
 
-Use Python 3.12 or newer. Install the project dependencies with:
+Use Python 3.12 or newer and [install uv](https://docs.astral.sh/uv/getting-started/installation/).
+From the project directory, install the app with:
 
 ~~~powershell
-uv sync
+uv tool install .
 ~~~
 
-Activate the resulting environment, or prefix the commands below with "uv run".
+You can then run `dgr` as shown below. If the command is not found, follow uv's
+instructions to add its tool executable directory to your PATH. Reinstall with
+`uv tool install --force .` after changing the app's code.
 
 Create an application in the [Discord Developer Portal](https://discord.com/developers/applications),
 then set up its bot and obtain its bot token from the **Bot** page. Enable the
@@ -34,19 +37,21 @@ YOUR_CHANNEL_ID
 C:\path\to\DiscordChatExporter.Cli.exe
 ~~~
 
-The same configured channel supplies all registered games.
+Run the commands from this project directory: the app reads `.env` and stores
+`database.db` in the current directory. The same configured channel supplies
+all registered games.
 
 ## Commands
 
 Dates are always **YEAR [MONTH]**. Omitting the month selects the whole year.
 
 ~~~powershell
-python discord_game_recorder.py fetch 2026 3
-python discord_game_recorder.py fetch 2026
+dgr fetch 2026 3
+dgr fetch 2026
 
-python discord_game_recorder.py eval 2026 3
-python discord_game_recorder.py eval 2026
-python discord_game_recorder.py eval 2026 3 --game wordle
+dgr eval 2026 3
+dgr eval 2026
+dgr eval 2026 3 --game wordle
 ~~~
 
 Fetching exports messages once and tries every registered parser. There is no
@@ -67,9 +72,9 @@ reported and skipped.
 Exclude or restore a player's result for a particular puzzle:
 
 ~~~powershell
-python discord_game_recorder.py ban_list add AUTHOR_ID PUZZLE_ID --game wordle
-python discord_game_recorder.py ban_list remove AUTHOR_ID PUZZLE_ID --game wordle
-python discord_game_recorder.py ban_list show --game wordle
+dgr ban_list add AUTHOR_ID PUZZLE_ID --game wordle
+dgr ban_list remove AUTHOR_ID PUZZLE_ID --game wordle
+dgr ban_list show --game wordle
 ~~~
 
 Wordle is also the default for ban commands. Puzzle identifiers and bans are
@@ -131,7 +136,7 @@ Wordle.from_legacy_row. Class separation does not change the stored schema.
 ## Tests
 
 ~~~powershell
-python -m unittest discover -s tests -v
+uv run python -m unittest discover -s tests -v
 ~~~
 
 The tests use temporary databases, a test-only second game, and mocked Discord
