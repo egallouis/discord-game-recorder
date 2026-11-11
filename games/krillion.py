@@ -40,7 +40,11 @@ class Krillion(Game):
         if match is None:
             return None
 
-        lines = [line.strip() for line in normalized[match.end() :].splitlines() if line.strip()]
+        lines = [
+            line.strip()
+            for line in normalized[match.end() :].splitlines()
+            if line.strip()
+        ]
         if len(lines) != 2:
             return None
         score_text, symbols = lines
