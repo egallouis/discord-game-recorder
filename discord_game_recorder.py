@@ -16,11 +16,17 @@ def main(argv=None):
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    fetch_parser = subparsers.add_parser("fetch", help="Fetch messages and read all registered games")
-    fetch_parser.add_argument("date", nargs="+", type=int, metavar="DATE", help="YEAR [MONTH]")
+    fetch_parser = subparsers.add_parser(
+        "fetch", help="Fetch messages and read all registered games"
+    )
+    fetch_parser.add_argument(
+        "date", nargs="+", type=int, metavar="DATE", help="YEAR [MONTH]"
+    )
 
     eval_parser = subparsers.add_parser("eval", help="Evaluate one game's results")
-    eval_parser.add_argument("date", nargs="+", type=int, metavar="DATE", help="YEAR [MONTH]")
+    eval_parser.add_argument(
+        "date", nargs="+", type=int, metavar="DATE", help="YEAR [MONTH]"
+    )
     eval_parser.add_argument("--game", choices=list(GAMES), default="wordle")
 
     ban_parser = subparsers.add_parser("ban_list", help="Manage excluded results")

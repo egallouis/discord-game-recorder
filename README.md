@@ -1,8 +1,8 @@
 # discord-game-recorder
 
 Read game results from a Discord channel and generate monthly or yearly leaderboards.
-Wordle is implemented. The shared framework supports adding other game types with
-their own parsing, scoring, and optional report statistics.
+Wordle and Krillion are implemented. The shared framework supports adding other
+game types with their own parsing, scoring, and optional report statistics.
 
 ## Setup
 
@@ -15,7 +15,8 @@ uv tool install .
 
 You can then run `dgr` as shown below. If the command is not found, follow uv's
 instructions to add its tool executable directory to your PATH. Reinstall with
-`uv tool install --force .` after changing the app's code.
+`uv tool install --force --reinstall-package discord-game-recorder .` after changing
+the app's code. This rebuilds the local package instead of reusing a cached build.
 
 Create an application in the [Discord Developer Portal](https://discord.com/developers/applications),
 then set up its bot and obtain its bot token from the **Bot** page. Enable the
@@ -52,6 +53,7 @@ dgr fetch 2026
 dgr eval 2026 3
 dgr eval 2026
 dgr eval 2026 3 --game wordle
+dgr eval 2026 11 --game krillion
 ~~~
 
 Fetching exports messages once and tries every registered parser. There is no
@@ -109,7 +111,11 @@ returned by the game instance. Scoring aggregates by player ID rather than
 display name. Wordle owns its puzzle-date conversions, solution lookups,
 hard-mode helper, scoring, and monthly statistics. Its report includes first-try
 wins and the easiest/hardest puzzles; solution lookups use the NYT endpoint.
-Krillion is not implemented yet.
+Krillion ranks players by the sum of their scores over the selected month or year,
+with higher totals ranking first. Each result stores its score and the seven
+ordered prompt scores as a numeric pattern in the database's JSON payload.
+Reports also highlight the best single-day score, listing each tied player and
+puzzle date.
 
 Python callers use parse_messages, save_results, and get_results for the shared
 data flow, then call the game instance's scoring or report methods. Wordle date

@@ -28,7 +28,9 @@ class Period:
 
     @property
     def fetch_start(self) -> datetime:
-        return datetime.combine(self.start, datetime.min.time(), UTC) - timedelta(days=2)
+        return datetime.combine(self.start, datetime.min.time(), UTC) - timedelta(
+            days=2
+        )
 
     @property
     def fetch_end(self) -> datetime:

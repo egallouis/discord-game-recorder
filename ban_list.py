@@ -29,8 +29,14 @@ def show_ban_list(game_key: str = "wordle"):
             "SELECT game_key, author_id, puzzle_id FROM GAME_BANS WHERE game_key = ? ORDER BY author_id, puzzle_id",
             (game_key,),
         ).fetchall()
-    frame = pl.DataFrame([tuple(row) for row in rows], orient="row", schema={
-        "game_key": pl.String, "author_id": pl.String, "puzzle_id": pl.String,
-    })
+    frame = pl.DataFrame(
+        [tuple(row) for row in rows],
+        orient="row",
+        schema={
+            "game_key": pl.String,
+            "author_id": pl.String,
+            "puzzle_id": pl.String,
+        },
+    )
     print(frame)
     return frame

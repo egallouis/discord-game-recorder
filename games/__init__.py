@@ -1,10 +1,11 @@
 """Explicit registry: add a Game implementation here to enable another game."""
 
 from games.base import Game, ParsedResult, PlayerScore, Result
+from games.krillion import Krillion
 from games.wordle import Wordle
 
 
-GAMES: dict[str, Game] = {"wordle": Wordle()}
+GAMES: dict[str, Game] = {"wordle": Wordle(), "krillion": Krillion()}
 
 
 def get_game(key: str = "wordle") -> Game:
@@ -14,4 +15,4 @@ def get_game(key: str = "wordle") -> Game:
         raise ValueError(f"Unknown game: {key}. Available games: {', '.join(GAMES)}") from None
 
 
-__all__ = ["GAMES", "Game", "ParsedResult", "PlayerScore", "Result", "Wordle", "get_game"]
+__all__ = ["GAMES", "Game", "Krillion", "ParsedResult", "PlayerScore", "Result", "Wordle", "get_game"]

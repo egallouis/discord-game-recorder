@@ -12,7 +12,6 @@ from games.base import Result
 from games.wordle import Wordle
 from periods import Period
 
-
 db_path = "database.db"
 SCHEMA_VERSION = 1
 
@@ -46,9 +45,15 @@ def _result_values(result: Result) -> tuple:
             raise ValueError("Result posting timestamps must include a timezone")
         posted_at = posted_at.astimezone(UTC).isoformat(timespec="microseconds")
     return (
-        result.game_key, str(result.author_id), result.name, str(result.puzzle_id),
-        result.puzzle_date.isoformat(), json.dumps(result.payload, ensure_ascii=False, allow_nan=False),
-        result.message_id, posted_at, result.raw_content,
+        result.game_key,
+        str(result.author_id),
+        result.name,
+        str(result.puzzle_id),
+        result.puzzle_date.isoformat(),
+        json.dumps(result.payload, ensure_ascii=False, allow_nan=False),
+        result.message_id,
+        posted_at,
+        result.raw_content,
     )
 
 
@@ -58,7 +63,9 @@ def _backup_legacy_database(con: sqlite3.Connection) -> None:
         return
     source = Path(filename)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    backup_path = source.with_name(f"{source.name}.pre-v1-{stamp}-{uuid4().hex[:8]}.bak")
+    backup_path = source.with_name(
+        f"{source.name}.pre-v1-{stamp}-{uuid4().hex[:8]}.bak"
+    )
     with closing(sqlite3.connect(backup_path)) as backup:
         con.backup(backup)
 
@@ -66,11 +73,16 @@ def _backup_legacy_database(con: sqlite3.Connection) -> None:
 def _initialize(con: sqlite3.Connection) -> None:
     version = con.execute("PRAGMA user_version").fetchone()[0]
     if version > SCHEMA_VERSION:
-        raise RuntimeError(f"Database schema version {version} is newer than this application supports")
+        raise RuntimeError(
+            f"Database schema version {version} is newer than this application supports"
+        )
     if version == SCHEMA_VERSION:
         return
 
-    tables = {row[0].upper() for row in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    tables = {
+        row[0].upper()
+        for row in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
     if tables & {"GAMES", "BAN_LIST"}:
         _backup_legacy_database(con)
 
@@ -116,7 +128,10 @@ def _initialize(con: sqlite3.Connection) -> None:
             rows = con.execute(
                 "SELECT author_id, name, game_id, tries, hardmode_enabled, pattern FROM GAMES"
             ).fetchall()
-            con.executemany(_UPSERT_RESULT, (_result_values(Wordle.from_legacy_row(row)) for row in rows))
+            con.executemany(
+                _UPSERT_RESULT,
+                (_result_values(Wordle.from_legacy_row(row)) for row in rows),
+            )
             con.executemany(
                 "INSERT OR IGNORE INTO PLAYERS(author_id, name) VALUES (?, ?)",
                 ((str(row[0]), row[1]) for row in rows),
@@ -151,15 +166,21 @@ def save_results(results: Iterable[Result], path: str | Path | None = None) -> N
         for result in results:
             cursor = con.execute(_UPSERT_RESULT, _result_values(result))
             if cursor.rowcount:
-                con.execute("""
+                con.execute(
+                    """
                     INSERT INTO PLAYERS(author_id, name) VALUES (?, ?)
                     ON CONFLICT(author_id) DO UPDATE SET name = excluded.name
-                """, (str(result.author_id), result.name))
+                """,
+                    (str(result.author_id), result.name),
+                )
 
 
 def get_results(
-    game_key: str = "wordle", period: Period | None = None,
-    path: str | Path | None = None, *, include_banned: bool = False,
+    game_key: str = "wordle",
+    period: Period | None = None,
+    path: str | Path | None = None,
+    *,
+    include_banned: bool = False,
 ) -> list[Result]:
     query = "SELECT r.* FROM RESULTS r WHERE r.game_key = ?"
     parameters = [game_key]
@@ -176,10 +197,16 @@ def get_results(
         rows = con.execute(query, parameters).fetchall()
     return [
         Result(
-            game_key=row["game_key"], author_id=row["author_id"], name=row["name"],
-            puzzle_id=row["puzzle_id"], puzzle_date=date.fromisoformat(row["puzzle_date"]),
-            payload=json.loads(row["payload_json"]), message_id=row["message_id"],
-            posted_at=datetime.fromisoformat(row["posted_at"]) if row["posted_at"] else None,
+            game_key=row["game_key"],
+            author_id=row["author_id"],
+            name=row["name"],
+            puzzle_id=row["puzzle_id"],
+            puzzle_date=date.fromisoformat(row["puzzle_date"]),
+            payload=json.loads(row["payload_json"]),
+            message_id=row["message_id"],
+            posted_at=datetime.fromisoformat(row["posted_at"])
+            if row["posted_at"]
+            else None,
             raw_content=row["raw_content"],
         )
         for row in rows

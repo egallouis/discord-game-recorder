@@ -20,12 +20,17 @@ class Wordle(Game):
 
     _day_zero = date(2021, 6, 19)
     _header = re.compile(r"\AWordle ([0-9][0-9,.]*) ([1-7Xx])/6(\*?)[ \t]*\n")
-    _colors = str.maketrans({
-        "\u2b1b": "0", "\u2b1c": "0",
-        "\U0001f7e8": "1", "\U0001f7e6": "1",
-        "\U0001f7e9": "2", "\U0001f7e7": "2",
-        "\ufe0f": None,
-    })
+    _colors = str.maketrans(
+        {
+            "\u2b1b": "0",
+            "\u2b1c": "0",
+            "\U0001f7e8": "1",
+            "\U0001f7e6": "1",
+            "\U0001f7e9": "2",
+            "\U0001f7e7": "2",
+            "\ufe0f": None,
+        }
+    )
 
     @classmethod
     def puzzle_id_to_date(cls, puzzle_id: int | str) -> date:
@@ -59,9 +64,16 @@ class Wordle(Game):
         """Convert a six-column record during the legacy database migration."""
         author_id, name, puzzle_id, tries, hardmode, pattern = row
         return Result(
-            game_key=cls.key, author_id=str(author_id), name=name,
-            puzzle_id=str(puzzle_id), puzzle_date=cls.puzzle_id_to_date(puzzle_id),
-            payload={"tries": int(tries), "hardmode_enabled": bool(hardmode), "pattern": pattern},
+            game_key=cls.key,
+            author_id=str(author_id),
+            name=name,
+            puzzle_id=str(puzzle_id),
+            puzzle_date=cls.puzzle_id_to_date(puzzle_id),
+            payload={
+                "tries": int(tries),
+                "hardmode_enabled": bool(hardmode),
+                "pattern": pattern,
+            },
         )
 
     def parse(self, text: str) -> ParsedResult | None:
@@ -73,7 +85,7 @@ class Wordle(Game):
         puzzle_id, tries_text, hardmode = match.groups()
         tries = 7 if tries_text.upper() == "X" else int(tries_text)
         rows = []
-        for line in normalized[match.end():].splitlines():
+        for line in normalized[match.end() :].splitlines():
             line = line.strip()
             if not line and not rows:
                 continue
@@ -85,15 +97,22 @@ class Wordle(Game):
 
         puzzle_number = int(puzzle_id.replace(",", "").replace(".", ""))
         return ParsedResult(
-            puzzle_id=str(puzzle_number), puzzle_date=self.puzzle_id_to_date(puzzle_number),
-            payload={"tries": tries, "hardmode_enabled": bool(hardmode), "pattern": "".join(rows)},
+            puzzle_id=str(puzzle_number),
+            puzzle_date=self.puzzle_id_to_date(puzzle_number),
+            payload={
+                "tries": tries,
+                "hardmode_enabled": bool(hardmode),
+                "pattern": "".join(rows),
+            },
         )
 
     def score(self, results: Sequence[Result]) -> list[PlayerScore]:
         scores = defaultdict(int)
         for result in results:
             scores[result.author_id] += 7 - result.payload["tries"]
-        return [PlayerScore(author_id, scores[author_id]) for author_id in sorted(scores)]
+        return [
+            PlayerScore(author_id, scores[author_id]) for author_id in sorted(scores)
+        ]
 
     def report_details(self, results: Sequence[Result], period: Period) -> str:
         if period.month is None or not results:
@@ -101,7 +120,7 @@ class Wordle(Game):
 
         one_tries = [result for result in results if result.payload["tries"] == 1]
         one_tries_string = " ".join(
-            f'{r.name}: Wordle {r.puzzle_id} on {r.puzzle_date:%Y-%m-%d} '
+            f"{r.name}: Wordle {r.puzzle_id} on {r.puzzle_date:%Y-%m-%d} "
             f'"{self.get_solution_from_date(r.puzzle_date)}"'
             for r in one_tries
         )
@@ -110,17 +129,20 @@ class Wordle(Game):
         for result in results:
             attempts[result.puzzle_id].append(result.payload["tries"])
             dates[result.puzzle_id] = result.puzzle_date
-        means = {puzzle_id: sum(values) / len(values) for puzzle_id, values in attempts.items()}
+        means = {
+            puzzle_id: sum(values) / len(values)
+            for puzzle_id, values in attempts.items()
+        }
         hardest = min(means, key=lambda key: (-means[key], dates[key]))
         easiest = min(means, key=lambda key: (means[key], dates[key]))
 
         return (
-            f'First-try solves this month: {len(one_tries)}\n'
-            f'{one_tries_string}\n\n'
+            f"First-try solves this month: {len(one_tries)}\n"
+            f"{one_tries_string}\n\n"
             f'The hardest Wordle was "{self.get_solution_from_date(dates[hardest])}" '
-            f'on {dates[hardest]:%Y-%m-%d}.\n'
-            f'You needed an average of {means[hardest]:.2f} attempts.\n\n'
+            f"on {dates[hardest]:%Y-%m-%d}.\n"
+            f"You needed an average of {means[hardest]:.2f} attempts.\n\n"
             f'The easiest Wordle was "{self.get_solution_from_date(dates[easiest])}" '
-            f'on {dates[easiest]:%Y-%m-%d}.\n'
-            f'You needed an average of just {means[easiest]:.2f} attempts.'
+            f"on {dates[easiest]:%Y-%m-%d}.\n"
+            f"You needed an average of just {means[easiest]:.2f} attempts."
         )
