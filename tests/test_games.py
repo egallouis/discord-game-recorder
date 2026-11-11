@@ -149,10 +149,10 @@ class StorageTests(DatabaseCase):
         database.save_results([edited])
         self.assertEqual(database.get_results(), [edited])
 
-    def test_known_timestamp_replaces_legacy_but_not_the_reverse(self):
-        legacy = result()
-        sourced = replace(legacy, posted_at=datetime(2026, 3, 1, tzinfo=UTC), message_id="1")
-        database.save_results([legacy, sourced, legacy])
+    def test_known_timestamp_replaces_undated_result_but_not_the_reverse(self):
+        undated = result()
+        sourced = replace(undated, posted_at=datetime(2026, 3, 1, tzinfo=UTC), message_id="1")
+        database.save_results([undated, sourced, undated])
         self.assertEqual(database.get_results(), [sourced])
 
     def test_same_puzzle_number_and_bans_are_isolated_by_game(self):
@@ -193,59 +193,70 @@ class StorageTests(DatabaseCase):
         with self.assertRaises(ValueError):
             database.save_results([replace(result(), posted_at=datetime(2026, 3, 1))])
 
-class MigrationTests(DatabaseCase):
-    def create_legacy(self, invalid=False):
-        with closing(sqlite3.connect(self.path)) as con, con:
-            con.execute("""CREATE TABLE GAMES (
-                author_id TEXT, name TEXT, game_id INTEGER, tries INTEGER,
-                hardmode_enabled BOOLEAN, pattern TEXT, PRIMARY KEY(author_id, game_id))""")
-            con.execute("CREATE TABLE BAN_LIST (author_id TEXT, game_id INTEGER, PRIMARY KEY(author_id, game_id))")
-            puzzle_id = "invalid" if invalid else Wordle.date_to_puzzle_id(date(2026, 3, 1))
-            con.execute("INSERT INTO GAMES VALUES (?, ?, ?, ?, ?, ?)", ("1", "Alice", puzzle_id, 2, 1, "0000022222"))
-            con.execute("INSERT INTO BAN_LIST VALUES (?, ?)", ("1", puzzle_id))
-
-    def test_legacy_migration_backs_up_preserves_data_and_runs_once(self):
-        self.create_legacy()
-        self.assertEqual(database.get_results(), [])
-        rows = database.get_results(include_banned=True)
-        self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0].payload, {"tries": 2, "hardmode_enabled": True, "pattern": "0000022222"})
-        self.assertEqual(rows[0].puzzle_date, date(2026, 3, 1))
-        self.assertIsNone(rows[0].posted_at)
-        self.assertIsNone(rows[0].message_id)
-        self.assertIsNone(rows[0].raw_content)
-        backups = list(self.path.parent.glob("test.db.pre-v1-*.bak"))
-        self.assertEqual(len(backups), 1)
-        with closing(sqlite3.connect(backups[0])) as backup:
-            self.assertEqual(backup.execute("PRAGMA user_version").fetchone()[0], 0)
-            self.assertEqual(backup.execute("SELECT COUNT(*) FROM GAMES").fetchone()[0], 1)
+class DatabaseInitializationTests(DatabaseCase):
+    def test_empty_database_initializes_current_schema(self):
         with closing(database.get_connection()) as con:
             self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 1)
-            self.assertEqual(con.execute("SELECT COUNT(*) FROM GAMES").fetchone()[0], 1)
-            self.assertEqual(con.execute("SELECT game_key FROM GAME_BANS").fetchone()[0], "wordle")
-        remove_from_ban_list("1", rows[0].puzzle_id)
-        self.assertEqual(database.get_results(), rows)
-        self.assertEqual(list(self.path.parent.glob("test.db.pre-v1-*.bak")), backups)
-
-    def test_failed_migration_rolls_back_schema_and_preserves_legacy(self):
-        self.create_legacy(invalid=True)
-        with self.assertRaises(ValueError):
-            database.get_connection()
-        with closing(sqlite3.connect(self.path)) as con:
-            self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 0)
-            self.assertEqual(con.execute("SELECT COUNT(*) FROM GAMES").fetchone()[0], 1)
             tables = {row[0] for row in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-            self.assertNotIn("RESULTS", tables)
-            self.assertNotIn("GAME_BANS", tables)
-        self.assertEqual(len(list(self.path.parent.glob("*.bak"))), 1)
+            self.assertEqual(tables, {"RESULTS", "GAME_BANS", "PLAYERS"})
+            indexes = {row[1] for row in con.execute("PRAGMA index_list(RESULTS)")}
+            self.assertIn("results_by_period", indexes)
+        self.assertEqual(database.get_results(), [])
+
+    def test_reopening_preserves_results_without_metadata_and_bans(self):
+        historical = result()
+        database.save_results([historical])
+        add_to_ban_list("1", historical.puzzle_id)
+        before = self.path.read_bytes()
+        for _ in range(2):
+            self.assertEqual(database.get_results(), [])
+            self.assertEqual(database.get_results(include_banned=True), [historical])
+            with closing(database.get_connection()) as con:
+                self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 1)
+                self.assertEqual(tuple(con.execute("SELECT * FROM PLAYERS").fetchone()), ("1", "Alice"))
+                self.assertEqual(tuple(con.execute("SELECT * FROM GAME_BANS").fetchone()),
+                                 ("wordle", "1", historical.puzzle_id))
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(list(self.path.parent.glob("*.bak")), [])
+        remove_from_ban_list("1", historical.puzzle_id)
+        self.assertEqual(database.get_results(), [historical])
+
+    def test_nonempty_unversioned_database_is_rejected_without_changes(self):
+        with closing(sqlite3.connect(self.path)) as con, con:
+            con.execute("CREATE TABLE ARCHIVE (value TEXT)")
+            con.execute("INSERT INTO ARCHIVE VALUES ('keep me')")
+        before = self.path.read_bytes()
+        with self.assertRaisesRegex(RuntimeError, "unversioned database is not empty"):
+            database.get_connection()
+        self.assertEqual(self.path.read_bytes(), before)
+        self.assertEqual(list(self.path.parent.glob("*.bak")), [])
+
+    def test_initialization_failure_rolls_back_and_can_be_retried(self):
+        with closing(sqlite3.connect(self.path)) as con:
+            def deny_bans_table(action, table, *unused):
+                if action == sqlite3.SQLITE_CREATE_TABLE and table == "GAME_BANS":
+                    return sqlite3.SQLITE_DENY
+                return sqlite3.SQLITE_OK
+
+            con.set_authorizer(deny_bans_table)
+            with self.assertRaises(sqlite3.DatabaseError):
+                database._initialize(con)
+            con.set_authorizer(None)
+            self.assertFalse(con.in_transaction)
+            self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 0)
+            self.assertEqual(con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall(), [])
+            database._initialize(con)
+            self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 1)
 
     def test_newer_schema_is_rejected_without_changes(self):
-        with closing(sqlite3.connect(self.path)) as con:
+        with closing(sqlite3.connect(self.path)) as con, con:
+            con.execute("CREATE TABLE FUTURE_DATA (value TEXT)")
+            con.execute("INSERT INTO FUTURE_DATA VALUES ('keep me')")
             con.execute("PRAGMA user_version = 2")
+        before = self.path.read_bytes()
         with self.assertRaisesRegex(RuntimeError, "newer"):
             database.get_connection()
-        with closing(sqlite3.connect(self.path)) as con:
-            self.assertEqual(con.execute("PRAGMA user_version").fetchone()[0], 2)
+        self.assertEqual(self.path.read_bytes(), before)
 
 
 class ReportTests(unittest.TestCase):

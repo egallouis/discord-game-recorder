@@ -59,23 +59,6 @@ class Wordle(Game):
         greens_per_line = (data == 2).astype(int).sum(1)
         return np.all(greens_per_line[:-1] <= greens_per_line[1:])
 
-    @classmethod
-    def from_legacy_row(cls, row: Sequence) -> Result:
-        """Convert a six-column record during the legacy database migration."""
-        author_id, name, puzzle_id, tries, hardmode, pattern = row
-        return Result(
-            game_key=cls.key,
-            author_id=str(author_id),
-            name=name,
-            puzzle_id=str(puzzle_id),
-            puzzle_date=cls.puzzle_id_to_date(puzzle_id),
-            payload={
-                "tries": int(tries),
-                "hardmode_enabled": bool(hardmode),
-                "pattern": pattern,
-            },
-        )
-
     def parse(self, text: str) -> ParsedResult | None:
         normalized = text.replace("\r\n", "\n").strip().translate(self._colors)
         match = self._header.match(normalized)

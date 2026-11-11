@@ -1,4 +1,4 @@
-"""Shared result persistence and versioned database migration."""
+"""Shared result persistence and current-schema initialization."""
 
 import json
 import sqlite3
@@ -6,10 +6,8 @@ from collections.abc import Iterable
 from contextlib import closing
 from datetime import UTC, date, datetime
 from pathlib import Path
-from uuid import uuid4
 
 from games.base import Result
-from games.wordle import Wordle
 from periods import Period
 
 db_path = "database.db"
@@ -57,20 +55,8 @@ def _result_values(result: Result) -> tuple:
     )
 
 
-def _backup_legacy_database(con: sqlite3.Connection) -> None:
-    filename = con.execute("PRAGMA database_list").fetchone()[2]
-    if not filename:
-        return
-    source = Path(filename)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
-    backup_path = source.with_name(
-        f"{source.name}.pre-v1-{stamp}-{uuid4().hex[:8]}.bak"
-    )
-    with closing(sqlite3.connect(backup_path)) as backup:
-        con.backup(backup)
-
-
 def _initialize(con: sqlite3.Connection) -> None:
+    """Open the supported schema, or create it in an empty database."""
     version = con.execute("PRAGMA user_version").fetchone()[0]
     if version > SCHEMA_VERSION:
         raise RuntimeError(
@@ -79,22 +65,22 @@ def _initialize(con: sqlite3.Connection) -> None:
     if version == SCHEMA_VERSION:
         return
 
-    tables = {
-        row[0].upper()
-        for row in con.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
-    }
-    if tables & {"GAMES", "BAN_LIST"}:
-        _backup_legacy_database(con)
-
     con.execute("BEGIN IMMEDIATE")
     try:
-        # Another process may have migrated while this connection made its backup.
+        # Another process may have initialized while we waited for the lock.
         version = con.execute("PRAGMA user_version").fetchone()[0]
         if version == SCHEMA_VERSION:
             con.commit()
             return
         if version != 0:
             raise RuntimeError(f"Unsupported database schema version: {version}")
+        if con.execute(
+            "SELECT 1 FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' LIMIT 1"
+        ).fetchone():
+            raise RuntimeError(
+                "Unsupported database schema: unversioned database is not empty. "
+                f"Use a schema version {SCHEMA_VERSION} database or a new database path."
+            )
         con.execute("""
             CREATE TABLE RESULTS (
                 game_key TEXT NOT NULL,
@@ -119,29 +105,11 @@ def _initialize(con: sqlite3.Connection) -> None:
             )
         """)
         con.execute("""
-            CREATE TABLE IF NOT EXISTS PLAYERS (
+            CREATE TABLE PLAYERS (
                 author_id TEXT NOT NULL PRIMARY KEY,
                 name TEXT NOT NULL
             )
         """)
-        if "GAMES" in tables:
-            rows = con.execute(
-                "SELECT author_id, name, game_id, tries, hardmode_enabled, pattern FROM GAMES"
-            ).fetchall()
-            con.executemany(
-                _UPSERT_RESULT,
-                (_result_values(Wordle.from_legacy_row(row)) for row in rows),
-            )
-            con.executemany(
-                "INSERT OR IGNORE INTO PLAYERS(author_id, name) VALUES (?, ?)",
-                ((str(row[0]), row[1]) for row in rows),
-            )
-        if "BAN_LIST" in tables:
-            con.execute("""
-                INSERT INTO GAME_BANS(game_key, author_id, puzzle_id)
-                SELECT 'wordle', CAST(author_id AS TEXT), CAST(game_id AS TEXT) FROM BAN_LIST
-            """)
-        # Keep legacy tables intact; the version marker prevents reimporting them.
         con.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         con.commit()
     except Exception:

@@ -124,20 +124,17 @@ Wordle.date_to_puzzle_id. The old module-level Wordle helpers and month/year
 convenience wrappers have been removed. CLI commands use the same syntax shown
 above.
 
-## Database compatibility
+## Database storage
 
-The first database access automatically migrates a legacy database in one
-transaction. Before migration, it creates a uniquely named SQLite backup beside
-the database, matching the pattern database.db.pre-v1-*.bak.
+The app uses SQLite schema version 1. A new or empty database is initialized
+automatically; existing databases must already use the supported version.
+Nonempty unversioned databases and unsupported schema versions are rejected
+without modifying their contents. Database format conversion is not supported.
 
-Existing results and bans become Wordle records. Results without original
-message metadata remain eligible, and a new imported submission can replace
-them. Common fields live in RESULTS with a JSON payload; bans live in GAME_BANS.
-The old GAMES and BAN_LIST tables remain intact as historical data and are not
-updated by new imports.
-
-The existing migration converts legacy Wordle records through
-Wordle.from_legacy_row. Class separation does not change the stored schema.
+Results, including game-specific scores and patterns, live in RESULTS with a
+JSON payload. Bans live in GAME_BANS, and player names are recorded in PLAYERS.
+Historical results without Discord message metadata remain eligible for
+leaderboards; importing a result with a posting timestamp can update them.
 
 ## Tests
 
